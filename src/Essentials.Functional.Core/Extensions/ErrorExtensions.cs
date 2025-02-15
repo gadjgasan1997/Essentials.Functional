@@ -2,6 +2,7 @@
 using LanguageExt.Common;
 using static System.Environment;
 // ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable ConvertToLambdaExpression
 
 namespace Essentials.Functional.Extensions;
 
@@ -49,7 +50,27 @@ public static class ErrorExtensions
     /// </summary>
     /// <param name="error">Ошибка</param>
     /// <returns>Исключение</returns>
-    public static Exception ToException(this Error error) => error.Exception.IfNone(new Exception(error.Message));
+    public static Exception TransformToException(this Error error)
+    {
+        return error.Exception
+            .Match(
+                Some: exception =>
+                {
+                    return string.IsNullOrWhiteSpace(error.Message)
+                        ? exception
+                        : new Exception($"{error.Code}: {error.Message}", exception);
+                },
+                None: () =>
+                {
+                    return error.Inner.Match(
+
+                        Some: innerError => new Exception(
+                            error.Message,
+                            new Exception($"{innerError.Code}: {innerError.Message}")),
+
+                        None: () => new Exception(error.Message));
+                });
+    }
 
     /// <summary>
     /// Возвращает агрегированное исключение из списка ошибок
@@ -59,9 +80,9 @@ public static class ErrorExtensions
     public static Exception ToAggregateException(this Seq<Error> errors)
     {
         if (errors.Count is 1)
-            return errors.First().ToException();
+            return errors.First().TransformToException();
         
         return new AggregateException(
-            innerExceptions: errors.Select(error => error.ToException()));
+            innerExceptions: errors.Select(error => error.TransformToException()));
     }
 }
